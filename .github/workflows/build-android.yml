@@ -73,12 +73,6 @@ jobs:
 
       - name: Export Android APK
         run: |
-          echo "HOME=$HOME"
-          ls -la "$HOME/debug.keystore" || echo "KEYSTORE MISSING"
-          echo "--- editor settings ---"
-          cat ~/.config/godot/editor_settings-4.tres
-          echo "--- preset keystore lines ---"
-          grep -n keystore export_presets.cfg
           mkdir -p build
           godot --headless --path . --export-release "Android" build/TheLostRoute.apk
           ls -la build/
