@@ -4,6 +4,7 @@ config_version=5
 [application]
 
 config/name="The Lost Route"
+config/icon="res://icons/icon.png"
 config/description="Native 3D block-puzzle path game. Copy of the original web game, built in Godot."
 run/main_scene="res://scenes/Main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
