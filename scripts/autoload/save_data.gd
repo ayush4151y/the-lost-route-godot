@@ -86,6 +86,12 @@ func get_best_endless() -> int:
 func set_best_endless(v: int):
 	_wr("rak_best_endless", v)
 
+func get_value(key: String, default = ""):
+	return _rd(key, default)
+
+func set_value(key: String, value):
+	_wr(key, value)
+
 func get_input_mode() -> String:
 	return _rd("rak_input", "dpad")
 

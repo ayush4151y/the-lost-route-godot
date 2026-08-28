@@ -32,7 +32,7 @@ func _ready():
 	decoy_geo = BoxMesh.new()
 	decoy_geo.size = Vector3(0.7, 0.8, 0.7)
 
-func material_for(type: String, emissive_intensity := 0.18) -> StandardMaterial3D:
+func material_for(type: String, emissive_intensity := 0.08) -> StandardMaterial3D:
 	var key = type + "_" + str(emissive_intensity)
 	if materials.has(key):
 		return materials[key]
@@ -40,12 +40,13 @@ func material_for(type: String, emissive_intensity := 0.18) -> StandardMaterial3
 	var m = StandardMaterial3D.new()
 	m.albedo_texture = tex_factory.cube_texture(type)
 	m.albedo_color = Color(1, 1, 1, 1)
-	m.emissive_texture = tex_factory.cube_texture(type)
+	m.emissive_texture = null
 	m.emissive_color = _hex(p["emissive"])
 	m.emissive_intensity = emissive_intensity
 	m.roughness = 1.0
 	m.metallic = 0.0
 	m.specular_mode = StandardMaterial3D.SPECULAR_DISABLED
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	materials[key] = m
 	return m
 

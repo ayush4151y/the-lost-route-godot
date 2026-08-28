@@ -3,10 +3,25 @@ class_name TextureFactory
 
 static var cache := {}
 
-static func cube_texture(type: String) -> ImageTexture:
+static func cube_texture(type: String) -> Texture:
 	if cache.has(type):
 		return cache[type]
-	var tex = make(type)
+	var path := ""
+	match type:
+		Constants.GRASS: path = "res://assets/texture/grass_top.jpg"
+		Constants.ICE: path = "res://assets/texture/ice.jpeg"
+		Constants.FIRE: path = "res://assets/texture/fire.png"
+		Constants.TNT: path = "res://assets/texture/tnt_top.jpg"
+		Constants.START: path = "res://assets/texture/start_top.jpg"
+		Constants.END: path = "res://assets/texture/end_top.jpg"
+		Constants.HEART: path = ""  # procedural only
+	var tex: Texture = null
+	if path != "":
+		tex = load(path)
+		if tex == null:
+			tex = make(type)
+	else:
+		tex = make(type)
 	cache[type] = tex
 	return tex
 

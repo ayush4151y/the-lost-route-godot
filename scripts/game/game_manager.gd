@@ -35,6 +35,7 @@ var segment_start_index := 0
 var show_start_index := 0
 var is_tutorial := false
 var menu_angle := 0.0
+var _ambience_started := false
 
 # ---- lifecycle ----
 func _ready():
@@ -58,6 +59,7 @@ func _ready():
 
 	mode = SaveData.get_mode()
 	current_level = SaveData.get_current_level()
+	set_input_mode(SaveData.get_input_mode())
 	if not SaveData.get_tutorial_done():
 		start_tutorial()
 	else:
@@ -104,6 +106,9 @@ func daily_label() -> String:
 
 func play_sfx(id: String, vol: float = 1.0):
 	AudioManager.play(id, "sfx", vol)
+
+func toggle_mute() -> bool:
+	return AudioManager.toggle_mute()
 
 func opposite(direction: String) -> String:
 	match direction:
@@ -313,6 +318,9 @@ func tap_to_start():
 	if state != "showing":
 		return
 	play_sfx("ui-click")
+	if not _ambience_started:
+		_ambience_started = true
+		AudioManager.start_ambience()
 	var seq = sequence_id
 	ui.show_tap_start(false)
 	cube_factory.remove_path_line()
@@ -389,19 +397,19 @@ func toggle_pause():
 	paused = !paused
 	if paused:
 		play_sfx("ui-pause")
-		AudioManager.set_muted(true)
+		AudioManager.pause_all()
 		ui.show_screen("pause")
 		ui.show_tap_start(false)
 	else:
 		play_sfx("ui-click")
-		AudioManager.set_muted(false)
+		AudioManager.resume_all()
 		ui.hide_screens()
 		if state == "showing":
 			ui.show_tap_start(true)
 
 func resume_from_pause():
 	paused = false
-	AudioManager.set_muted(false)
+	AudioManager.resume_all()
 	play_sfx("ui-click")
 	ui.hide_screens()
 	if state == "showing":
@@ -409,8 +417,7 @@ func resume_from_pause():
 
 func go_home_from_pause():
 	paused = false
-	AudioManager.set_muted(false)
-	play_sfx("ui-back")
+	AudioManager.resume_all()
 	back_to_menu()
 
 # ---- movement ----
