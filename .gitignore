@@ -1,0 +1,7 @@
+# Godot Editor / build artifacts
+.godot/
+build/
+
+# OS / editor temp
+*.tmp
+.DS_Store

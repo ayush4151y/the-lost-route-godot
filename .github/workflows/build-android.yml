@@ -1,0 +1,50 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Godot editor + export templates
+        uses: input-output/godot-builds@v2
+        with:
+          version: 4.7.2
+          artifacts: editor,templates
+          platform: linux
+          target: editor
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Export Android APK (release)
+        run: |
+          mkdir -p build
+          godot --headless --export-release "Android" build/TheLostRoute.apk
+        env:
+          GODOT_SILENCE_ROOT_WARNING: "1"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TheLostRoute-APK
+          path: build/TheLostRoute.apk
+          if-no-files-found: error
