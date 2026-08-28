@@ -1,88 +1,108 @@
 extends Node
-# SaveData - localStorage equivalent using user:// config file.
-# Handles all persistence: modes, completed/skipped/current levels,
-# daily streak, endless best, input mode, audio volumes, tutorial flag.
 
-const FILE := "user://rak_save.cfg"
+func suffix(mode: String) -> String:
+	match mode:
+		"endless": return "_e"
+		"daily": return "_d"
+		"tutorial": return "_t"
+		_: return ""
 
-const MODE_CAMPAIGN := "campaign"
-const MODE_ENDLESS := "endless"
-const MODE_DAILY := "daily"
+func _rd(key: String, default):
+	var p = "user://" + key + ".json"
+	if not FileAccess.file_exists(p):
+		return default
+	var f = FileAccess.open(p, FileAccess.READ)
+	var txt = f.get_as_text()
+	f.close()
+	var v = JSON.parse_string(txt)
+	return v if v != null else default
 
-var data := {}
+func _wr(key: String, value):
+	var p = "user://" + key + ".json"
+	var f = FileAccess.open(p, FileAccess.WRITE)
+	f.store_string(JSON.stringify(value))
+	f.close()
 
-func _ready() -> void:
-	load_save()
+func get_completed(mode: String) -> Array:
+	return _rd("rak_completed" + suffix(mode), [])
 
-func load_save() -> void:
-	data = {}
-	var cfg := ConfigFile.new()
-	if cfg.load(FILE) == OK:
-		for key in cfg.get_section_keys("rak"):
-			data[key] = cfg.get_value("rak", key)
-	# defaults
-	if not data.has("mode"):
-		data["mode"] = MODE_CAMPAIGN
-	if not data.has("input"):
-		data["input"] = "dpad"
-	if not data.has("muted"):
-		data["muted"] = "0"
-	if not data.has("vol_music"):
-		data["vol_music"] = "0.8"
-	if not data.has("vol_sfx"):
-		data["vol_sfx"] = "0.8"
+func save_completed(mode: String, levels: Array):
+	_wr("rak_completed" + suffix(mode), levels)
 
-func _save() -> void:
-	var cfg := ConfigFile.new()
-	for key in data:
-		cfg.set_value("rak", key, data[key])
-	cfg.save(FILE)
+func mark_level_complete(mode: String, level: int):
+	var c = get_completed(mode)
+	if not c.has(level):
+		c.append(level)
+		save_completed(mode, c)
 
-func get_key(key: String, def := "") -> String:
-	if data.has(key):
-		return str(data[key])
-	return def
+func get_current_level() -> int:
+	return int(_rd("rak_level", 1))
 
-func set_key(key: String, val) -> void:
-	data[key] = val
-	_save()
+func save_current_level(level: int):
+	_wr("rak_level", level)
 
-# ---- arrays (completed / skipped levels) ----
-func get_levels(key: String) -> Array:
-	var raw := get_key(key, "[]")
-	var parsed = JSON.parse_string(raw)
-	if parsed is Array:
-		return parsed
-	return []
+func get_skipped(mode: String) -> Array:
+	return _rd("rak_skipped" + suffix(mode), [])
 
-func add_level(key: String, level: int) -> void:
-	var arr := get_levels(key)
-	if not arr.has(level):
-		arr.append(level)
-	set_key(key, JSON.stringify(arr))
+func save_skipped(mode: String, levels: Array):
+	_wr("rak_skipped" + suffix(mode), levels)
 
-func has_level(key: String, level: int) -> bool:
-	return get_levels(key).has(level)
+func mark_level_skipped(mode: String, level: int):
+	var s = get_skipped(mode)
+	if not s.has(level):
+		s.append(level)
+		save_skipped(mode, s)
 
-# ---- daily helpers ----
-func today_key() -> int:
-	var d := Time.get_date_dict_from_system()
-	return d.year * 10000 + d.month * 100 + d.day
+func get_mode() -> String:
+	return _rd("rak_mode", "campaign")
+
+func set_mode(mode: String):
+	_wr("rak_mode", mode)
+
+func is_daily_done() -> bool:
+	return int(_rd("rak_daily_last", 0)) == today_key()
 
 func get_daily_streak() -> int:
-	return int(get_key("daily_streak", "0"))
+	return int(_rd("rak_daily_streak", 0))
 
-func set_daily_streak(v: int) -> void:
-	set_key("daily_streak", str(v))
+func mark_daily_complete():
+	var today = today_key()
+	if int(_rd("rak_daily_last", 0)) == today:
+		return
+	var last = int(_rd("rak_daily_last", 0))
+	var streak = 1
+	if last == today - 1:
+		streak = get_daily_streak() + 1
+	_wr("rak_daily_streak", streak)
+	_wr("rak_daily_last", today)
 
-func get_int(key: String, def := 0) -> int:
-	return int(get_key(key, str(def)))
+func today_key() -> int:
+	var d = Time.get_date_dict_from_system()
+	return d.year * 10000 + d.month * 100 + d.day
 
-func get_float(key: String, def := 0.0) -> float:
-	return float(get_key(key, str(def)))
+func get_best_endless() -> int:
+	return int(_rd("rak_best_endless", 0))
 
-func reset_progress() -> void:
-	data = {}
-	var f := FileAccess.open(FILE, FileAccess.WRITE)
-	f.store_string("")
-	load_save()
+func set_best_endless(v: int):
+	_wr("rak_best_endless", v)
+
+func get_input_mode() -> String:
+	return _rd("rak_input", "dpad")
+
+func set_input_mode(mode: String):
+	_wr("rak_input", mode)
+
+func get_tutorial_done() -> bool:
+	return bool(_rd("rak_tutorial", false))
+
+func set_tutorial_done():
+	_wr("rak_tutorial", true)
+
+func reset_progress():
+	for k in ["rak_completed", "rak_skipped", "rak_level", "rak_completed_e", "rak_skipped_e",
+			"rak_level_e", "rak_completed_d", "rak_skipped_d", "rak_level_d",
+			"rak_completed_t", "rak_skipped_t", "rak_level_t", "rak_mode",
+			"rak_best_endless", "rak_daily_last", "rak_daily_streak", "rak_tutorial", "rak_input"]:
+		var p = "user://" + k + ".json"
+		if FileAccess.file_exists(p):
+			DirAccess.remove_absolute(p)

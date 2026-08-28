@@ -1,248 +1,399 @@
-extends CanvasLayer
-# UI - builds the HUD and all screens (menu, level select, settings, pause,
-# win, game over) using programmatic Control nodes. Communicates via signals.
+extends Control
+class_name UI
 
-signal action(action_name: String, payload: Variant)
+var gm = null
+var hud: Control
+var top_bar: HBoxContainer
+var indicator_label: Label
+var hearts_label: Label
+var pause_btn: Button
+var phase_label: Label
+var bottom: HBoxContainer
+var dpad: VBoxContainer
+var hint_btn: Button
+var skip_btn: Button
+var rotate_btn: Button
+var tnt_label: Label
+var fire_overlay: ColorRect
+var tap_overlay: Control
+var panels: Control
+var menu_panel: Control
+var level_panel: Control
+var settings_panel: Control
+var win_panel: Control
+var gameover_panel: Control
+var pause_panel: Control
+var win_title: Label
+var win_sub: Label
+var win_btn: Button
+var gameover_title: Label
+var gameover_sub: Label
+var gameover_final: Label
+var gameover_btn: Button
+var current_input_mode := "dpad"
 
-var _root: Control
-var _hud: Control
-var _level_label: Label
-var _phase_label: Label
-var _hearts: Array = []
-var _fire_bar: ColorRect
-var _fire_label: Label
-var _hint_btn: Button
-var _menu: Control
-var _dirty := true
+func init(g):
+	gm = g
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_build_hud()
+	_build_overlays()
+	_build_panels()
+	hide_screens()
+	show_game_ui(false)
 
-func _ready() -> void:
-	_root = Control.new()
-	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(_root)
-
-func _make_panel(center := true) -> Control:
-	var panel := ColorRect.new()
-	panel.color = Color(0, 0, 0, 0.0)
-	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return panel
-
-func _btn(text: String, pos: Vector2, size := Vector2(220, 44), fg := Color.WHITE) -> Button:
-	var b := Button.new()
+func _make_btn(text: String, cb: Callable, minw := 120, minh := 54) -> Button:
+	var b = Button.new()
 	b.text = text
-	b.position = pos
-	b.size = size
-	b.add_theme_color_override("font_color", fg)
-	b.add_theme_font_size_override("font_size", 18)
+	b.custom_minimum_size = Vector2(minw, minh)
+	b.focus_mode = Control.FOCUS_NONE
+	b.add_theme_font_size_override("font_size", 22)
+	b.pressed.connect(cb)
 	return b
 
-func _label(text: String, pos: Vector2, size: float) -> Label:
-	var l := Label.new()
-	l.text = text
-	l.position = pos
-	l.add_theme_font_size_override("font_size", size)
-	return l
+func _panel(extra := 0) -> PanelContainer:
+	var p = PanelContainer.new()
+	var sb = StyleBoxFlat.new()
+	sb.bg_color = Color(0.08, 0.12, 0.2, 0.92)
+	sb.border_color = Color(0.4, 0.8, 1.0, 0.8)
+	sb.border_width_left = 2
+	sb.border_width_right = 2
+	sb.border_width_top = 2
+	sb.border_width_bottom = 2
+	sb.corner_radius_top_left = 14
+	sb.corner_radius_top_right = 14
+	sb.corner_radius_bottom_left = 14
+	sb.corner_radius_bottom_right = 14
+	p.add_theme_stylebox_override("panel", sb)
+	return p
 
-# ---------------- HUD ----------------
-func init_hud(on_hint: Callable, on_pause: Callable, on_skip: Callable, on_rotate: Callable) -> void:
-	_hud = Control.new()
-	_hud.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_child(_hud)
+func _build_hud():
+	hud = Control.new()
+	hud.mouse_filter = Control.MOUSE_FILTER_STOP
+	hud.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(hud)
 
-	_level_label = _label("Level 1", Vector2(20, 20), 30)
-	_phase_label = _label("", Vector2(20, 60), 20)
-	_phase_label.modulate = Color(1, 1, 0.5)
-	_hud.add_child(_level_label)
-	_hud.add_child(_phase_label)
+	top_bar = HBoxContainer.new()
+	top_bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	top_bar.position = Vector2(12, 12)
+	top_bar.add_theme_constant_override("separation", 12)
+	hud.add_child(top_bar)
 
-	# hearts
-	for i in 3:
-		var h := _label("♥", Vector2(20 + i * 30, 95), 26)
-		h.modulate = Color(0.9, 0.2, 0.2)
-		_hearts.append(h)
-		_hud.add_child(h)
+	indicator_label = Label.new()
+	indicator_label.text = "Level 1"
+	indicator_label.add_theme_font_size_override("font_size", 24)
+	indicator_label.add_theme_color_override("font_color", Color(1, 1, 1))
+	top_bar.add_child(indicator_label)
 
-	# fire bar
-	_fire_label = _label("", Vector2(20, 130), 16)
-	_fire_label.visible = false
-	_hud.add_child(_fire_label)
-	_fire_bar = ColorRect.new()
-	_fire_bar.color = Color(1, 0.4, 0.1)
-	_fire_bar.position = Vector2(20, 152)
-	_fire_bar.size = Vector2(120, 10)
-	_fire_bar.visible = false
-	_hud.add_child(_fire_bar)
+	hearts_label = Label.new()
+	hearts_label.text = "♥♥♥"
+	hearts_label.add_theme_font_size_override("font_size", 26)
+	hearts_label.add_theme_color_override("font_color", Color(1.0, 0.3, 0.35))
+	top_bar.add_child(hearts_label)
 
-	# buttons (top-right)
-	_hint_btn = _btn("HINT", Vector2(1180, 20), Vector2(80, 40))
-	_hint_btn.pressed.connect(on_hint)
-	_hud.add_child(_hint_btn)
-	var pause := _btn("II", Vector2(1090, 20), Vector2(80, 40))
-	pause.pressed.connect(on_pause)
-	_hud.add_child(pause)
-	var rot := _btn("ROT", Vector2(1000, 20), Vector2(80, 40))
-	rot.pressed.connect(on_rotate)
-	_hud.add_child(rot)
-	var skip := _btn("SKIP", Vector2(910, 20), Vector2(80, 40))
-	skip.pressed.connect(on_skip)
-	_hud.add_child(skip)
+	pause_btn = _make_btn("II", gm_cb("toggle_pause"), 56, 48)
+	top_bar.add_child(pause_btn)
 
-	set_level(1)
+	phase_label = Label.new()
+	phase_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	phase_label.position = Vector2(0, 64)
+	phase_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	phase_label.text = ""
+	phase_label.add_theme_font_size_override("font_size", 30)
+	phase_label.add_theme_color_override("font_color", Color(1, 0.92, 0.6))
+	hud.add_child(phase_label)
 
-func set_level(level: int) -> void:
-	if _level_label:
-		_level_label.text = "Level %d" % level
+	tnt_label = Label.new()
+	tnt_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	tnt_label.position = Vector2(0, 104)
+	tnt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tnt_label.text = ""
+	tnt_label.add_theme_font_size_override("font_size", 26)
+	tnt_label.add_theme_color_override("font_color", Color(1.0, 0.5, 0.2))
+	hud.add_child(tnt_label)
 
-func set_phase(text: String, fire: bool = false) -> void:
-	if _phase_label:
-		_phase_label.text = text
-	_show_fire(fire)
+	bottom = HBoxContainer.new()
+	bottom.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	bottom.position = Vector2(12, -12)
+	bottom.alignment = BoxContainer.ALIGNMENT_CENTER
+	hud.add_child(bottom)
 
-func _show_fire(on: bool) -> void:
-	if _fire_bar:
-		_fire_bar.visible = on
-		_fire_label.visible = on
+	hint_btn = _make_btn("?", gm_cb("hint_move"), 64, 64)
+	bottom.add_child(hint_btn)
+	skip_btn = _make_btn("SKIP", gm_cb("skip_show"), 90, 64)
+	bottom.add_child(skip_btn)
+	rotate_btn = _make_btn("↻", gm_cb("rotate_view"), 64, 64)
+	bottom.add_child(rotate_btn)
 
-func set_hearts(n: int) -> void:
-	for i in _hearts.size():
-		var empty := i >= n
-		_hearts[i].modulate = Color(0.4, 0.4, 0.4) if empty else Color(0.9, 0.2, 0.2)
+	dpad = VBoxContainer.new()
+	dpad.add_theme_constant_override("separation", 4)
+	var up = _make_btn("▲", gm_cb_str("handle_move", "up"), 72, 56)
+	var mid = HBoxContainer.new()
+	var left = _make_btn("◀", gm_cb_str("handle_move", "left"), 72, 56)
+	var right = _make_btn("▶", gm_cb_str("handle_move", "right"), 72, 56)
+	mid.add_child(left); mid.add_child(right)
+	var down = _make_btn("▼", gm_cb_str("handle_move", "down"), 72, 56)
+	dpad.add_child(up); dpad.add_child(mid); dpad.add_child(down)
+	bottom.add_child(dpad)
 
-func set_fire(frac: float) -> void:
-	if _fire_bar and _fire_label:
-		_fire_bar.size.x = 120 * clampf(frac, 0, 1)
-		_fire_label.text = "FIRE! %d%%" % int(frac * 100)
+	hud.gui_input.connect(_on_hud_input)
 
-func set_hint_glow(glow: bool) -> void:
-	if _hint_btn:
-		_hint_btn.modulate = Color(1, 0.8, 0.2) if glow else Color.WHITE
+func gm_cb(method: String) -> Callable:
+	return Callable(gm, method)
 
-func show_hud() -> void:
-	if _hud:
-		_hud.visible = true
+func gm_cb_str(method: String, arg: String) -> Callable:
+	return func(): gm.call(method, arg)
 
-func hide_hud() -> void:
-	if _hud:
-		_hud.visible = false
+func _on_hud_input(event):
+	if current_input_mode != "swipe":
+		return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_swipe_start = event.position
+		elif _swipe_start != null:
+			var d = event.position - _swipe_start
+			_swipe_start = null
+			if d.length() > 30:
+				if abs(d.x) > abs(d.y):
+					gm.handle_move("right" if d.x > 0 else "left")
+				else:
+					gm.handle_move("down" if d.y > 0 else "up")
+var _swipe_start = null
 
-# ---------------- generic screen builder ----------------
-func _overlay(title: String) -> Control:
-	var panel := ColorRect.new()
-	panel.color = Color(0, 0, 0, 0.82)
-	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_root.add_child(panel)
-	var tl := _label(title, Vector2(360, 120), 40)
-	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	tl.position = Vector2(300, 120)
-	tl.size = Vector2(680, 60)
-	panel.add_child(tl)
-	return panel
+func _build_overlays():
+	fire_overlay = ColorRect.new()
+	fire_overlay.color = Color(1, 0.2, 0.1, 0.0)
+	fire_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fire_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(fire_overlay)
 
-# ---------------- MENU ----------------
-func show_menu(on_click: Callable) -> void:
-	_clear_overlays()
-	_menu = _overlay("THE LOST ROUTE")
-	_menu.color = Color(0.05, 0.12, 0.2, 0.9)
-	var tag := _label("MEMORY • REACTION • MASTERY", Vector2(300, 190), 20)
-	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	tag.size = Vector2(680, 40)
-	_menu.add_child(tag)
-	var y := 300
-	var labels := [
-		["START", "start"],
-		["ENDLESS", "endless"],
-		["DAILY", "daily"],
-		["SETTINGS", "settings"],
-	]
-	for item in labels:
-		var b := _btn(item[0], Vector2(530, y), Vector2(220, 46))
-		b.pressed.connect(func(): on_click.call(item[1]))
-		_menu.add_child(b)
-		y += 60
-	var foot := _label("AY GAME STUDIO", Vector2(470, 620), 16)
-	_menu.add_child(foot)
+	tap_overlay = Control.new()
+	tap_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	tap_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	tap_overlay.gui_input.connect(func(e):
+		if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
+			gm.tap_to_start())
+	add_child(tap_overlay)
+	tap_overlay.hide()
 
-# ---------------- PAUSE ----------------
-func show_pause(on_click: Callable) -> void:
-	var panel := _overlay("GAME PAUSED")
-	var home := _btn("HOME", Vector2(480, 300), Vector2(320, 46))
-	home.pressed.connect(func(): on_click.call("home"))
-	panel.add_child(home)
-	var stay := _btn("STAY", Vector2(480, 360), Vector2(320, 46))
-	stay.pressed.connect(func(): on_click.call("stay"))
-	panel.add_child(stay)
+func _build_panels():
+	panels = Control.new()
+	panels.set_anchors_preset(Control.PRESET_FULL_RECT)
+	panels.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(panels)
 
-# ---------------- WIN ----------------
-func show_win(title: String, subtitle: String, next_label: String, on_click: Callable) -> void:
-	var panel := _overlay(title)
-	if subtitle != "":
-		var sub := _label(subtitle, Vector2(400, 200), 22)
-		sub.size = Vector2(480, 40)
-		sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		panel.add_child(sub)
-	var b := _btn(next_label, Vector2(480, 320), Vector2(320, 46))
-	b.pressed.connect(func(): on_click.call("next"))
-	panel.add_child(b)
+	# MENU
+	menu_panel = _panel()
+	menu_panel.set_anchors_preset(Control.PRESET_CENTER)
+	menu_panel.custom_minimum_size = Vector2(340, 420)
+	var mv = VBoxContainer.new()
+	mv.add_theme_constant_override("separation", 12)
+	mv.set_anchors_preset(Control.PRESET_CENTER)
+	menu_panel.add_child(mv)
+	var title = Label.new(); title.text = "THE LOST ROUTE"; title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 34); title.add_theme_color_override("font_color", Color(0.6, 0.9, 1))
+	mv.add_child(title)
+	mv.add_child(_make_btn("Play", gm_cb("start_game"), 240, 56))
+	mv.add_child(_make_btn("Endless", gm_cb("start_endless"), 240, 56))
+	mv.add_child(_make_btn("Daily", gm_cb("start_daily"), 240, 56))
+	mv.add_child(_make_btn("Tutorial", gm_cb("start_tutorial"), 240, 56))
+	mv.add_child(_make_btn("Settings", gm_cb("show_settings"), 240, 56))
+	panels.add_child(menu_panel)
 
-# ---------------- GAME OVER ----------------
-func show_game_over(line: String, on_click: Callable) -> void:
-	var panel := _overlay("GAME OVER")
-	var l := _label(line, Vector2(400, 200), 22)
-	l.size = Vector2(480, 40)
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	panel.add_child(l)
-	var b := _btn("TRY AGAIN", Vector2(480, 320), Vector2(320, 46))
-	b.pressed.connect(func(): on_click.call("retry"))
-	panel.add_child(b)
+	# LEVEL SELECT
+	level_panel = _panel()
+	level_panel.set_anchors_preset(Control.PRESET_CENTER)
+	level_panel.custom_minimum_size = Vector2(360, 520)
+	var lv = VBoxContainer.new()
+	lv.set_anchors_preset(Control.PRESET_FULL_RECT)
+	level_panel.add_child(lv)
+	var lhead = Label.new(); lhead.text = "SELECT LEVEL"; lhead.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lhead.add_theme_font_size_override("font_size", 28); lhead.add_theme_color_override("font_color", Color(0.6, 0.9, 1))
+	lv.add_child(lhead)
+	var scroll = ScrollContainer.new(); scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var grid = GridContainer.new(); grid.columns = 5; grid.add_theme_constant_override("h_separation", 6); grid.add_theme_constant_override("v_separation", 6)
+	grid.name = "grid"
+	scroll.add_child(grid)
+	lv.add_child(scroll)
+	lv.add_child(_make_btn("Back", gm_cb("back_to_menu"), 240, 50))
+	panels.add_child(level_panel)
 
-# ---------------- SETTINGS ----------------
-func show_settings(on_click: Callable) -> void:
-	var panel := _overlay("SETTINGS")
-	var y := 240
-	var items := [
-		["INPUT: KEYS", "input"],
-		["SOUND: " + ("OFF" if SaveData.get_key("muted", "0") == "1" else "ON"), "sound"],
-		["RESET PROGRESS", "reset"],
-		["BACK", "back"],
-	]
-	for item in items:
-		var b := _btn(item[0], Vector2(480, y), Vector2(320, 44))
-		b.pressed.connect(func(): on_click.call(item[1]))
-		panel.add_child(b)
-		y += 56
+	# SETTINGS
+	settings_panel = _panel()
+	settings_panel.set_anchors_preset(Control.PRESET_CENTER)
+	settings_panel.custom_minimum_size = Vector2(340, 360)
+	var sv = VBoxContainer.new(); sv.add_theme_constant_override("separation", 12)
+	sv.set_anchors_preset(Control.PRESET_CENTER)
+	settings_panel.add_child(sv)
+	var shead = Label.new(); shead.text = "SETTINGS"; shead.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	shead.add_theme_font_size_override("font_size", 28); shead.add_theme_color_override("font_color", Color(0.6, 0.9, 1))
+	sv.add_child(shead)
+	sv.add_child(_make_btn("Input: DPad", _toggle_input, 260, 50))
+	sv.add_child(_make_btn("Reset Progress", gm_cb("reset_progress"), 260, 50))
+	sv.add_child(_make_btn("Back", gm_cb("hide_settings"), 260, 50))
+	panels.add_child(settings_panel)
 
-# ---------------- LEVEL SELECT ----------------
-func show_level_select(current: int, completed: Array, skipped: Array, on_click: Callable) -> void:
-	var panel := _overlay("SELECT LEVEL / CAMPAIGN")
-	var grid := GridContainer.new()
-	grid.columns = 10
-	grid.position = Vector2(180, 260)
-	grid.size = Vector2(920, 320)
-	grid.add_theme_constant_override("h_separation", 6)
-	grid.add_theme_constant_override("v_separation", 6)
-	panel.add_child(grid)
-	var available_upto := current
-	for i in range(1, 201):
-		var b := _btn(str(i), Vector2.ZERO, Vector2(80, 28))
-		b.add_theme_font_size_override("font_size", 12)
-		if completed.has(i):
-			b.add_theme_color_override("font_color", Color(0.4, 1, 0.4))
-		elif skipped.has(i):
-			b.add_theme_color_override("font_color", Color(1, 0.4, 0.4))
-		elif i == current:
-			b.add_theme_color_override("font_color", Color(1, 0.8, 0.2))
-		if i <= available_upto:
-			b.pressed.connect(func(): on_click.call(i))
+	# WIN
+	win_panel = _panel()
+	win_panel.set_anchors_preset(Control.PRESET_CENTER)
+	win_panel.custom_minimum_size = Vector2(360, 320)
+	var wv = VBoxContainer.new(); wv.add_theme_constant_override("separation", 12)
+	wv.set_anchors_preset(Control.PRESET_CENTER)
+	win_panel.add_child(wv)
+	win_title = Label.new(); win_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	win_title.add_theme_font_size_override("font_size", 32); win_title.add_theme_color_override("font_color", Color(0.6, 1.0, 0.6))
+	wv.add_child(win_title)
+	win_sub = Label.new(); win_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	win_sub.add_theme_font_size_override("font_size", 22)
+	wv.add_child(win_sub)
+	win_btn = _make_btn("NEXT LEVEL", gm_cb("next_level"), 240, 56)
+	wv.add_child(win_btn)
+	panels.add_child(win_panel)
+
+	# GAMEOVER
+	gameover_panel = _panel()
+	gameover_panel.set_anchors_preset(Control.PRESET_CENTER)
+	gameover_panel.custom_minimum_size = Vector2(360, 360)
+	var gv = VBoxContainer.new(); gv.add_theme_constant_override("separation", 12)
+	gv.set_anchors_preset(Control.PRESET_CENTER)
+	gameover_panel.add_child(gv)
+	gameover_title = Label.new(); gameover_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	gameover_title.add_theme_font_size_override("font_size", 32); gameover_title.add_theme_color_override("font_color", Color(1.0, 0.5, 0.5))
+	gv.add_child(gameover_title)
+	gameover_sub = Label.new(); gameover_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	gameover_sub.add_theme_font_size_override("font_size", 22)
+	gv.add_child(gameover_sub)
+	gameover_final = Label.new(); gameover_final.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	gameover_final.add_theme_font_size_override("font_size", 18); gameover_final.add_theme_color_override("font_color", Color(0.9, 0.9, 0.7))
+	gv.add_child(gameover_final)
+	gameover_btn = _make_btn("TRY AGAIN", gm_cb("restart"), 240, 56)
+	gv.add_child(gameover_btn)
+	gv.add_child(_make_btn("Menu", gm_cb("back_to_menu"), 240, 50))
+	panels.add_child(gameover_panel)
+
+	# PAUSE
+	pause_panel = _panel()
+	pause_panel.set_anchors_preset(Control.PRESET_CENTER)
+	pause_panel.custom_minimum_size = Vector2(320, 280)
+	var pv = VBoxContainer.new(); pv.add_theme_constant_override("separation", 12)
+	pv.set_anchors_preset(Control.PRESET_CENTER)
+	pause_panel.add_child(pv)
+	var phead = Label.new(); phead.text = "PAUSED"; phead.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	phead.add_theme_font_size_override("font_size", 30); phead.add_theme_color_override("font_color", Color(0.6, 0.9, 1))
+	pv.add_child(phead)
+	pv.add_child(_make_btn("Resume", gm_cb("resume_from_pause"), 240, 54))
+	pv.add_child(_make_btn("Restart", gm_cb("restart"), 240, 54))
+	pv.add_child(_make_btn("Menu", gm_cb("go_home_from_pause"), 240, 54))
+	panels.add_child(pause_panel)
+
+func _toggle_input():
+	if current_input_mode == "dpad":
+		set_input_mode("swipe")
+	else:
+		set_input_mode("dpad")
+
+# ---- public API used by GameManager ----
+func set_phase(text: String):
+	phase_label.text = text
+
+func set_indicator(text: String):
+	indicator_label.text = text
+
+func set_hearts(hp: int, max_hp: int):
+	var s = ""
+	for i in range(max_hp):
+		s += "♥" if i < hp else "♡"
+	hearts_label.text = s
+	hearts_label.visible = true
+
+func show_hearts():
+	hearts_label.visible = true
+
+func hide_hearts():
+	hearts_label.visible = false
+
+func show_game_ui(on: bool):
+	hud.visible = on
+
+func show_tap_start(on: bool):
+	tap_overlay.visible = on
+	if on:
+		tap_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	else:
+		tap_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+func set_skip_visible(on: bool):
+	skip_btn.visible = on
+
+func set_hint_visible(on: bool):
+	hint_btn.visible = on
+
+func set_rotate_visible(on: bool):
+	rotate_btn.visible = on
+
+func glow_hint(on: bool):
+	hint_btn.modulate = Color(1.0, 1.0, 0.6) if on else Color(1, 1, 1)
+
+func set_tnt_back(dir: String):
+	tnt_label.text = "Go BACK: " + dir.to_upper()
+
+func clear_tnt_back():
+	tnt_label.text = ""
+
+func set_fire_overlay(on: bool):
+	var target = 0.18 if on else 0.0
+	fire_overlay.color = Color(1, 0.2, 0.1, target)
+
+func hide_screens():
+	for p in [menu_panel, level_panel, settings_panel, win_panel, gameover_panel, pause_panel]:
+		p.hide()
+
+func show_screen(name: String):
+	hide_screens()
+	match name:
+		"menu": menu_panel.show()
+		"level_select": level_panel.show()
+		"settings": settings_panel.show()
+		"win": win_panel.show()
+		"gameover": gameover_panel.show()
+		"pause": pause_panel.show()
+
+func build_level_grid(items: Array):
+	var grid = level_panel.find_child("grid", true, false)
+	for c in grid.get_children():
+		c.queue_free()
+	for it in items:
+		var b = Button.new()
+		b.text = str(it["level"])
+		b.custom_minimum_size = Vector2(56, 56)
+		b.focus_mode = Control.FOCUS_NONE
+		var col = Color(0.6, 0.7, 0.8)
+		match it["status"]:
+			"complete": col = Color(0.4, 0.9, 0.5)
+			"skipped": col = Color(0.9, 0.8, 0.3)
+			"current": col = Color(0.4, 0.8, 1.0)
+			"available": col = Color(0.7, 0.7, 0.7)
+			"locked": col = Color(0.4, 0.4, 0.45)
+		b.add_theme_color_override("font_color", col)
+		if it["status"] != "locked":
+			b.pressed.connect(func(): gm.start_level(it["level"]))
 		else:
 			b.disabled = true
-			b.text = "🔒"
 		grid.add_child(b)
-	var back := _btn("< BACK", Vector2(20, 20), Vector2(120, 40))
-	back.pressed.connect(func(): on_click.call("back"))
-	panel.add_child(back)
 
-func _clear_overlays() -> void:
-	for child in _root.get_children():
-		if child != _hud:
-			child.queue_free()
+func set_win(title: String, sub: String, btn: String):
+	win_title.text = title
+	win_sub.text = sub
+	win_btn.text = btn
+
+func set_gameover(title: String, sub: String, final_text: String, btn: String):
+	gameover_title.text = title
+	gameover_sub.text = sub
+	gameover_final.text = final_text
+	gameover_btn.text = btn
+
+func set_input_mode(m: String):
+	current_input_mode = m
+	if m == "swipe":
+		dpad.visible = false
+	else:
+		dpad.visible = true

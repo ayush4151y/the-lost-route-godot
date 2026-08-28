@@ -1,6 +1,6 @@
-[gd_scene load_steps=2 format=3 uid="uid://tlr_main0000002"]
+[gd_scene load_steps=2 format=3 uid="uid://dlostroute_main"]
 
-[ext_resource type="Script" path="res://scripts/game/game_manager.gd" id="1_gm"]
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 
 [node name="Main" type="Node3D"]
-script = ExtResource("1_gm")
+script = ExtResource("1_main")
