@@ -59,6 +59,12 @@ jobs:
           export/android/debug_keystore_pass = "android"
           EOF
 
+      - name: Install Android build template
+        run: |
+          mkdir -p android/build
+          unzip -o ~/.local/share/godot/export_templates/4.7.2.stable/android_source.zip -d android/build >/dev/null
+          printf '4.7.2.stable' > android/.build_version
+
       - name: Preheat project import (best-effort)
         run: timeout 90 godot --headless --path . -e || true
 
