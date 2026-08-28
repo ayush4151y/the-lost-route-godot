@@ -5,3 +5,6 @@ build/
 # OS / editor temp
 *.tmp
 .DS_Store
+
+# Generated import metadata (re-imported on build)
+*.import

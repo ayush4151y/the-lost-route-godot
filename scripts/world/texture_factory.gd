@@ -3,9 +3,34 @@ class_name TextureFactory
 
 static var cache := {}
 
+static func image(path: String) -> Texture:
+	if cache.has(path):
+		return cache[path]
+	var tex: Texture = null
+	var f = FileAccess.open(path, FileAccess.READ)
+	if f != null:
+		var buf = f.get_buffer(f.get_length())
+		f.close()
+		var img = Image.new()
+		var ok = false
+		if path.ends_with(".png"):
+			ok = img.load_png_from_buffer(buf) == OK
+		elif path.ends_with(".jpg") or path.ends_with(".jpeg"):
+			ok = img.load_jpg_from_buffer(buf) == OK
+		else:
+			ok = img.load_buffer(buf) == OK
+		if ok and not img.is_empty():
+			var t = ImageTexture.create_from_image(img)
+			t.set("resource_local_to_scene", false)
+			tex = t
+	if tex == null:
+		tex = _blank()
+	cache[path] = tex
+	return tex
+
 static func cube_texture(type: String) -> Texture:
-	if cache.has(type):
-		return cache[type]
+	if cache.has("cube_" + type):
+		return cache["cube_" + type]
 	var path := ""
 	match type:
 		Constants.GRASS: path = "res://assets/texture/grass_top.jpg"
@@ -14,15 +39,8 @@ static func cube_texture(type: String) -> Texture:
 		Constants.TNT: path = "res://assets/texture/tnt_top.jpg"
 		Constants.START: path = "res://assets/texture/start_top.jpg"
 		Constants.END: path = "res://assets/texture/end_top.jpg"
-		Constants.HEART: path = ""  # procedural only
-	var tex: Texture = null
-	if path != "":
-		tex = load(path)
-		if tex == null:
-			tex = make(type)
-	else:
-		tex = make(type)
-	cache[type] = tex
+	var tex = image(path) if path != "" else _blank()
+	cache["cube_" + type] = tex
 	return tex
 
 static func color_from_hex(h: int) -> Color:
@@ -30,6 +48,13 @@ static func color_from_hex(h: int) -> Color:
 		float((h >> 16) & 0xff) / 255.0,
 		float((h >> 8) & 0xff) / 255.0,
 		float(h & 0xff) / 255.0, 1.0)
+
+static func _blank() -> ImageTexture:
+	var img = Image.create(4, 4, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0.5, 0.5, 0.5, 1.0))
+	var t = ImageTexture.create_from_image(img)
+	t.set("resource_local_to_scene", false)
+	return t
 
 static func make(type: String) -> ImageTexture:
 	var S = 64

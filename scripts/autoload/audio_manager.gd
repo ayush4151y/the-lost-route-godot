@@ -37,21 +37,30 @@ func _ready():
 	for key in AMBIENCE:
 		ambience_players[key] = _make_loop(AMBIENCE[key])
 
+func _stream(path: String, loop: bool = false) -> AudioStream:
+	var key = path + ("|loop" if loop else "")
+	if streams.has(key):
+		return streams[key]
+	var st: AudioStream = null
+	var f = FileAccess.open(path, FileAccess.READ)
+	if f != null:
+		var buf = f.get_buffer(f.get_length())
+		f.close()
+		if path.ends_with(".mp3"):
+			var s = AudioStreamMP3.new(); s.data = buf; s.loop = loop; st = s
+		elif path.ends_with(".ogg"):
+			var s = AudioStreamOggVorbis.new(); s.data = buf; s.loop = loop; st = s
+		elif path.ends_with(".wav"):
+			var s = AudioStreamWAV.new(); s.data = buf; st = s
+	streams[key] = st
+	return st
+
 func _load(path: String) -> AudioStream:
-	if streams.has(path):
-		return streams[path]
-	var s = load(path)
-	if s == null:
-		return null
-	streams[path] = s
-	return s
+	return _stream(path, false)
 
 func _make_loop(path: String) -> AudioStreamPlayer:
 	var p = AudioStreamPlayer.new()
-	var s = _load(path)
-	if s != null and s is AudioStream:
-		s.loop = true
-		p.stream = s
+	p.stream = _stream(path, true)
 	p.volume_db = _db(music_vol)
 	p.bus = "Master"
 	add_child(p)

@@ -57,7 +57,7 @@ func _img_btn(path: String, cb: Callable, w: int) -> Button:
 	var b = Button.new()
 	b.focus_mode = Control.FOCUS_NONE
 	b.custom_minimum_size = Vector2(w, 82)
-	var tex = load(path)
+	var tex = TextureFactory.image(path)
 	if tex != null:
 		b.icon = tex
 	b.expand_icon = true
@@ -286,7 +286,7 @@ func _build_panels():
 	panels.add_child(menu_panel)
 
 	var bg = TextureRect.new()
-	var btex = load("res://assets/menu/sky.png")
+	var btex = TextureFactory.image("res://assets/menu/sky.png")
 	if btex != null:
 		bg.texture = btex
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -309,7 +309,7 @@ func _build_panels():
 	cc.add_child(mv)
 
 	var logo = TextureRect.new()
-	var ltex = load("res://assets/menu/logo.png")
+	var ltex = TextureFactory.image("res://assets/menu/logo.png")
 	if ltex != null:
 		logo.texture = ltex
 	logo.expand_mode = 1
@@ -325,7 +325,7 @@ func _build_panels():
 	mv.add_child(tag)
 
 	var isl = TextureRect.new()
-	var itex = load("res://assets/menu/island.png")
+	var itex = TextureFactory.image("res://assets/menu/island.png")
 	if itex != null:
 		isl.texture = itex
 	isl.expand_mode = 1
